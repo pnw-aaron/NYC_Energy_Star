@@ -4,6 +4,30 @@ Created on Thu Jan 17 11:30:52 2019
 
 @author: ahenders
 """
+import pandas as pd
+import numpy as np
+
+# No warnings about setting value on copy of slice
+pd.options.mode.chained_assignment = None
+
+# Display up to 60 columns of a dataframe
+pd.set_option('display.max_columns', 60)
+
+# Matplotlib visualization
+import matplotlib.pyplot as plt
+
+# Set default font size
+plt.rcParams['font.size'] = 24
+
+# Internal ipython tool for setting figure size
+from IPython.core.pylabtools import figsize
+
+# Seaborn for visualization
+import seaborn as sns
+sns.set(font_scale = 2)
+
+# Splitting data into training and testing
+from sklearn.model_selection import train_test_split
 
 # Function to calculate missing values by column
 def missing_values_table(df):
@@ -26,45 +50,77 @@ def missing_values_table(df):
         '% of Total Values', ascending=False).round(1)
         
         # Print some summary information
-        print ("Your selected dataframe has " + str(df.shape[1]) + " columns.\n"      
-            "There are " + str(mis_val_table_ren_columns.shape[0]) +
-              " columns that have missing values.")
+        #print ("Your selected dataframe has " + str(df.shape[1]) + " columns.\n"      
+        #    "There are " + str(mis_val_table_ren_columns.shape[0]) +
+        #      " columns that have missing values.")
         
         # Return the dataframe with missing information
         return mis_val_table_ren_columns
+
+def remove_collinear_features(x, threshold):
+    '''
+    Objective:
+        Remove collinear features in a dataframe with a correlation coefficient
+        greater than the threshold. Removing collinear features can help a model
+        to generalize and improves the interpretability of the model.
+        
+    Inputs: 
+        threshold: any features with correlations greater than this value are removed
     
-import pandas as pd
-import numpy as np
+    Output: 
+        dataframe that contains only the non-highly-collinear features
+    '''
+    
+    # Dont want to remove correlations between Energy Star Score
+    y = x['score']
+    x = x.drop(columns = ['score'])
+    
+    # Calculate the correlation matrix
+    corr_matrix = x.corr()
+    iters = range(len(corr_matrix.columns) - 1)
+    drop_cols = []
 
-# No warnings about setting value on copy of slice
-pd.options.mode.chained_assignment = None
+    # Iterate through the correlation matrix and compare correlations
+    for i in iters:
+        for j in range(i):
+            item = corr_matrix.iloc[j:(j+1), (i+1):(i+2)]
+            col = item.columns
+            row = item.index
+            val = abs(item.values)
+            
+            # If correlation exceeds the threshold
+            if val >= threshold:
+                # Print the correlated features and the correlation value
+                # print(col.values[0], "|", row.values[0], "|", round(val[0][0], 2))
+                drop_cols.append(col.values[0])
 
-# Display up to 60 columns of a dataframe
-pd.set_option('display.max_columns', 60)
+    # Drop one of each pair of correlated columns
+    drops = set(drop_cols)
+    x = x.drop(columns = drops)
+    x = x.drop(columns = ['Weather Normalized Site EUI (kBtu/ft²)', 
+                          'Water Use (All Water Sources) (kgal)',
+                          'log_Water Use (All Water Sources) (kgal)',
+                          'Largest Property Use Type - Gross Floor Area (ft²)'])
+    
+    # Add the score back in to the data
+    x['score'] = y
+               
+    return x
 
-# Matplotlib visualization
-import matplotlib.pyplot as plt
+# Function to calculate mean absolute error
+def mae(y_true, y_pred):
+    return np.mean(abs(y_true - y_pred))   
 
-# Set default font size
-# plt.rcParams['font.size'] = 24
 
-# Internal ipython tool for setting figure size
-from IPython.core.pylabtools import figsize
+YEAR = 2017 
 
-# Seaborn for visualization
-import seaborn as sns
-# sns.set(font_scale = 2)
-
-# Splitting data into training and testing
-from sklearn.model_selection import train_test_split
-
-data = pd.read_csv('data/Energy_and_Water_Data_Disclosure_for_Local_Law_84_2017__Data_for_Calendar_Year_2016__.csv', encoding='utf-8')
+data = pd.read_csv('data/' + str(YEAR) + '/Energy_and_Water_Data_Disclosure_for_Local_Law_84_' + str(YEAR) + '__Data_for_Calendar_Year_' + str(YEAR - 1) + '__.csv', encoding='utf-8')
 
 # Display top of dataframe
-data.head()
+# data.head()
 
 # See the column data types and non-missing values
-data.info()
+# data.info()
 
 # Replace all occurrences of Not Available with numpy not a number
 data = data.replace({'Not Available': np.nan})
@@ -96,7 +152,7 @@ data = data.rename(columns = {'ENERGY STAR Score': 'score'})
 
 
 ## Histogram of the Energy Star Score
-plt.style.use('fivethirtyeight')
+#plt.style.use('fivethirtyeight')
 #plt.hist(data['score'].dropna(), bins = 100, edgecolor = 'k');
 #plt.xlabel('Score'); plt.ylabel('Number of Buildings'); 
 #plt.title('Energy Star Score Distribution');
@@ -107,11 +163,9 @@ plt.style.use('fivethirtyeight')
 #plt.xlabel('Site EUI'); 
 #plt.ylabel('Count'); plt.title('Site EUI Distribution');
 
+#data['Site EUI (kBtu/ft²)'].describe()
 
-data['Site EUI (kBtu/ft²)'].describe()
-
-
-data['Site EUI (kBtu/ft²)'].dropna().sort_values().tail(10)
+#data['Site EUI (kBtu/ft²)'].dropna().sort_values().tail(10)
 
 # Calculate first and third quartile
 first_quartile = data['Site EUI (kBtu/ft²)'].describe()['25%']
@@ -179,10 +233,10 @@ boroughs = list(boroughs[boroughs.values > 100].index)
 correlations_data = data.corr()['score'].sort_values()
 
 # Print the most negative correlations
-print(correlations_data.head(15), '\n')
+# print(correlations_data.head(15), '\n')
 
 # Print the most positive correlations
-print(correlations_data.tail(15))
+# print(correlations_data.tail(15))
 
 # Select the numeric columns
 numeric_subset = data.select_dtypes(include=[np.number])
@@ -213,10 +267,10 @@ features = features.dropna(subset = ['score'])
 correlations = features.corr()['score'].dropna().sort_values()
 
 # Display most negative correlations
-print(correlations.head(15), '\n')
+# print(correlations.head(15), '\n')
 
 # Display most positive correlations
-print(correlations.tail(15))
+#print(correlations.tail(15))
 
 figsize(12, 10)
 
@@ -237,42 +291,109 @@ features = features[features['Largest Property Use Type'].isin(types)]
 #plt.ylabel('Energy Star Score', size = 28)
 #plt.title('Energy Star Score vs Site EUI', size = 36);
 
-# Extract the columns to  plot
-plot_data = features[['score', 'Site EUI (kBtu/ft²)', 
-                      'Weather Normalized Source EUI (kBtu/ft²)', 
-                      'log_Total GHG Emissions (Metric Tons CO2e)']]
+## Extract the columns to  plot
+#plot_data = features[['score', 'Site EUI (kBtu/ft²)', 
+#                      'Weather Normalized Source EUI (kBtu/ft²)', 
+#                      'log_Total GHG Emissions (Metric Tons CO2e)']]
+#
+## Replace the inf with nan
+#plot_data = plot_data.replace({np.inf: np.nan, -np.inf: np.nan})
+#
+## Rename columns 
+#plot_data = plot_data.rename(columns = {'Site EUI (kBtu/ft²)': 'Site EUI', 
+#                                        'Weather Normalized Source EUI (kBtu/ft²)': 'Weather Norm EUI',
+#                                        'log_Total GHG Emissions (Metric Tons CO2e)': 'log GHG Emissions'})
+#
+## Drop na values
+#plot_data = plot_data.dropna()
+#
+## Function to calculate correlation coefficient between two columns
+#def corr_func(x, y, **kwargs):
+#    r = np.corrcoef(x, y)[0][1]
+#    ax = plt.gca()
+#    ax.annotate("r = {:.2f}".format(r),
+#                xy=(.2, .8), xycoords=ax.transAxes,
+#                size = 20)
+#
+## Create the pairgrid object
+#grid = sns.PairGrid(data = plot_data, size = 3)
+#
+## Upper is a scatter plot
+#grid.map_upper(plt.scatter, color = 'red', alpha = 0.6)
+#
+## Diagonal is a histogram
+#grid.map_diag(plt.hist, color = 'red', edgecolor = 'black')
+#
+## Bottom is correlation and density plot
+#grid.map_lower(corr_func);
+#grid.map_lower(sns.kdeplot, cmap = plt.cm.Reds)
+#
+## Title for entire plot
+#plt.suptitle('Pairs Plot of Energy Data', size = 36, y = 1.02);
 
-# Replace the inf with nan
-plot_data = plot_data.replace({np.inf: np.nan, -np.inf: np.nan})
+# Copy the original data
+features = data.copy()
 
-# Rename columns 
-plot_data = plot_data.rename(columns = {'Site EUI (kBtu/ft²)': 'Site EUI', 
-                                        'Weather Normalized Source EUI (kBtu/ft²)': 'Weather Norm EUI',
-                                        'log_Total GHG Emissions (Metric Tons CO2e)': 'log GHG Emissions'})
+# Select the numeric columns
+numeric_subset = data.select_dtypes(include=[np.number])
 
-# Drop na values
-plot_data = plot_data.dropna()
+# Create columns with log of numeric columns
+for col in numeric_subset.columns:
+    # Skip the Energy Star Score column
+    if col == 'score':
+        next
+    else:
+        numeric_subset['log_' + col] = np.log(numeric_subset[col])
+        
+# Select the categorical columns
+categorical_subset = data[['Borough', 'Largest Property Use Type']]
 
-# Function to calculate correlation coefficient between two columns
-def corr_func(x, y, **kwargs):
-    r = np.corrcoef(x, y)[0][1]
-    ax = plt.gca()
-    ax.annotate("r = {:.2f}".format(r),
-                xy=(.2, .8), xycoords=ax.transAxes,
-                size = 20)
+# One hot encode
+categorical_subset = pd.get_dummies(categorical_subset)
 
-# Create the pairgrid object
-grid = sns.PairGrid(data = plot_data, size = 3)
+# Join the two dataframes using concat
+# Make sure to use axis = 1 to perform a column bind
+features = pd.concat([numeric_subset, categorical_subset], axis = 1)
 
-# Upper is a scatter plot
-grid.map_upper(plt.scatter, color = 'red', alpha = 0.6)
+# features.shape
 
-# Diagonal is a histogram
-grid.map_diag(plt.hist, color = 'red', edgecolor = 'black')
+features = remove_collinear_features(features, 0.6)
 
-# Bottom is correlation and density plot
-grid.map_lower(corr_func);
-grid.map_lower(sns.kdeplot, cmap = plt.cm.Reds)
+# Remove any columns with all na values
+features  = features.dropna(axis=1, how = 'all')
+#features.shape
 
-# Title for entire plot
-plt.suptitle('Pairs Plot of Energy Data', size = 36, y = 1.02);
+# Extract the buildings with no score and the buildings with a score
+no_score = features[features['score'].isna()]
+score = features[features['score'].notnull()]
+
+#print(no_score.shape)
+#print(score.shape)
+
+# Separate out the features and targets
+features = score.drop(columns='score')
+targets = pd.DataFrame(score['score'])
+
+# Replace the inf and -inf with nan (required for later imputation)
+features = features.replace({np.inf: np.nan, -np.inf: np.nan})
+
+# Split into 70% training and 30% testing set
+X, X_test, y, y_test = train_test_split(features, targets, test_size = 0.3, random_state = 42)
+
+#print(X.shape)
+#print(X_test.shape)
+#print(y.shape)
+#print(y_test.shape)
+
+baseline_guess = np.median(y)
+
+print('The baseline guess is a score of %0.2f' % baseline_guess)
+print("Baseline Performance on the test set: MAE = %0.4f" % mae(y_test, baseline_guess))
+
+
+# Save the no scores, training, and testing data
+no_score.to_csv('data/' + str(YEAR) + '/no_score_' + str(YEAR) + '.csv', index = False)
+X.to_csv('data/' + str(YEAR) + '/training_features_' + str(YEAR) + '.csv', index = False)
+X_test.to_csv('data/' + str(YEAR) + '/testing_features_' + str(YEAR) + '.csv', index = False)
+y.to_csv('data/' + str(YEAR) + '/training_labels_' + str(YEAR) + '.csv', index = False)
+y_test.to_csv('data/' + str(YEAR) + '/testing_labels_' + str(YEAR) + '.csv', index = False)
